@@ -37,7 +37,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            cd /var/www/myapp/backend
+            cd /var/www/myapp
             #update the tag of the image
             sed -i "s|^DOCKER_IMAGE=.*|DOCKER_IMAGE=${{ env.IMAGE }}:${{ env.TAG }}|" .env
             docker compose pull backend
