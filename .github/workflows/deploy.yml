@@ -7,85 +7,38 @@ on:
 jobs:
   checks:
     uses: ./.github/workflows/pr-check.yml
-
-  deploy:
-    needs: checks
+  build:
+    # needs: [checks]
     runs-on: ubuntu-latest
-
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /var/www/myapp/backend
-            git pull origin main
-            cd /var/www/myapp
-            docker compose up --build -d backend
-  notify:
-    needs: [checks, deploy]
-    runs-on: ubuntu-latest
-    if: always()
-    permissions:
-      actions: read
-    steps:
-      - name: Notify Telegram
+      - uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        run: docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
+      - name: Build and push Docker image
         env:
-          GH_TOKEN: ${{ github.token }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          CHECKS_RESULT: ${{ needs.checks.result }}
-          DEPLOY_RESULT: ${{ needs.deploy.result }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.ref_name }}
-          ACTOR: ${{ github.actor }}
-          SHA: ${{ github.sha }}
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          JOBS_API: repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs
+          IMAGE_SHA: ${{ secrets.DOCKER_USER }}/backend:sha-${{ github.sha }}
+          IMAGE_LATEST: ${{ secrets.DOCKER_USER }}/backend:latest
         run: |
-          icon() {
-            case "$1" in
-              success)   echo "✅" ;;
-              failure)   echo "❌" ;;
-              cancelled) echo "🚫" ;;
-              skipped)   echo "⏭" ;;
-              *)         echo "❔" ;;
-            esac
-          }
+          docker build -t $IMAGE_SHA -t $IMAGE_LATEST .
+          docker push $IMAGE_SHA
+          docker push $IMAGE_LATEST
 
-          # Every failed step across all jobs of this run, as "job → step"
-          FAILED_STEPS=$(gh api "$JOBS_API" --paginate \
-            --jq '.jobs[] | .name as $job | .steps[]? | select(.conclusion == "failure") | "• \($job) → \(.name)"' \
-            || echo "• не удалось получить список шагов")
+  # deploy:
+  #   needs: checks
+  #   runs-on: ubuntu-latest
 
-          if [ "$CHECKS_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ]; then
-            HEADER="✅ Деплой успешен"
-          else
-            HEADER="❌ Деплой упал"
-          fi
-
-          TEXT="$HEADER
-          $REPO @ $BRANCH (${SHA:0:7}) by $ACTOR
-          ${COMMIT_MSG%%$'\n'*}
-
-          $(icon "$CHECKS_RESULT") Проверки (lint/test): $CHECKS_RESULT
-          $(icon "$DEPLOY_RESULT") Деплой (SSH): $DEPLOY_RESULT"
-
-          if [ -n "$FAILED_STEPS" ]; then
-            TEXT="$TEXT
-
-          Упавшие шаги:
-          $FAILED_STEPS"
-          fi
-
-          TEXT="$TEXT
-
-          $RUN_URL"
-
-          curl -sS --fail-with-body -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=${TEXT}" \
-            --data-urlencode "disable_web_page_preview=true"
+  #   steps:
+  #     - name: Deploy via SSH
+  #       uses: appleboy/ssh-action@v1.0.3
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USER }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           cd /var/www/myapp/backend
+  #           git pull origin main
+  #           cd /var/www/myapp
+  #           docker compose up --build -d backend
+  # notify:
+  #   needs: [checks, deploy]
+  #   uses: ./.github/workflows/notify.yml
