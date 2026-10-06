@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+env:
+  IMAGE: ${{ secrets.DOCKER_USER }}/backend
+  TAG: sha-${{ github.sha }}
+
 jobs:
   checks:
     uses: ./.github/workflows/pr-check.yml
@@ -15,14 +19,10 @@ jobs:
       - name: Login to Docker Hub
         run: docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
       - name: Build and push Docker image
-        env:
-          IMAGE_SHA: ${{ secrets.DOCKER_USER }}/backend:sha-${{ github.sha }}
-          IMAGE_LATEST: ${{ secrets.DOCKER_USER }}/backend:latest
         run: |
-          docker build -t $IMAGE_SHA -t $IMAGE_LATEST .
-          docker push $IMAGE_SHA
-          docker push $IMAGE_LATEST
-          echo "image_sha=$IMAGE_SHA" >> $GITHUB_ENV
+          docker build -t $IMAGE:$TAG -t $IMAGE:latest .
+          docker push $IMAGE:$TAG
+          docker push $IMAGE:latest
 
   deploy:
     needs: [build]
@@ -36,10 +36,12 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
             cd /var/www/myapp/backend
             #update the tag of the image
-            -sed -i "s|DOCKER_IMAGE=.*|DOCKER_IMAGE=${{needs.build.outputs.image_sha}}|" .env
-            docker compose up --build -d --no-deps backend
+            sed -i "s|^DOCKER_IMAGE=.*|DOCKER_IMAGE=${{ env.IMAGE }}:${{ env.TAG }}|" .env
+            docker compose pull backend
+            docker compose up -d --no-deps backend
   notify:
     needs: [checks, deploy, build]
     if: always()
