@@ -42,4 +42,11 @@ jobs:
             docker compose up --build -d --no-deps backend
   notify:
     needs: [checks, deploy, build]
+    if: always()
+    permissions:
+      actions: read
     uses: ./.github/workflows/notify.yml
+    with:
+      checks_result: ${{ needs.checks.result }}
+      deploy_result: ${{ needs.deploy.result }}
+    secrets: inherit
