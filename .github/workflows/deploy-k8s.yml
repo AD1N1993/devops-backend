@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+env:
+  IMAGE: ${{ secrets.DOCKER_USER }}/backend
+  TAG: sha-${{ github.sha }}
+
 jobs:
   checks:
     uses: ./.github/workflows/pr-check.yml
@@ -11,24 +15,17 @@ jobs:
   build:
     needs: [checks]
     runs-on: ubuntu-latest
-    outputs:
-      image_sha: ${{ steps.build-push.outputs.image_sha }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Вход в Docker Hub
-        run: docker login -u ${{ vars.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
+        run: echo "${{ secrets.DOCKER_PASS }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
 
       - name: Build and Push образа
-        id: build-push
-        env:
-          IMAGE_SHA: ${{ vars.DOCKER_USER }}/backend:sha-${{ github.sha }}
-          IMAGE_LATEST: ${{ vars.DOCKER_USER }}/backend:latest
         run: |
-          docker build -t $IMAGE_SHA -t $IMAGE_LATEST .
-          docker push $IMAGE_SHA
-          docker push $IMAGE_LATEST
-          echo "image_sha=$IMAGE_SHA" >> $GITHUB_OUTPUT
+          docker build -t $IMAGE:$TAG -t $IMAGE:latest .
+          docker push $IMAGE:$TAG
+          docker push $IMAGE:latest
 
   deploy:
     needs: [build]
@@ -41,7 +38,7 @@ jobs:
 
       - name: Deploy to k3s
         run: |
-          kubectl set image deployment/backend backend=${{ needs.build.outputs.image_sha }}
+          kubectl set image deployment/backend backend=$IMAGE:$TAG
           kubectl rollout status deployment/backend --timeout=120s
 
   notify:
