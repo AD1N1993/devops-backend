@@ -15,7 +15,7 @@ spec:
       imagePullSecrets:
         - name: dockerhub-cred
       containers:
-        - name: backend
+        - name: backend-api
           image: ${IMAGE}
           ports:
             - containerPort: 3000

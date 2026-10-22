@@ -40,10 +40,10 @@ jobs:
 
       - name: Deploy to k3s
         env:
-          IMAGE: ${{ needs.build.outputs.image_sha }}
+          IMAGE: ${{ env.IMAGE }}:${{ env.TAG }}
         run: |
-          envsubst < manifests/backend.yaml | kubectl apply -f -
-          kubectl rollout status deployment/backend --timeout=120s
+          envsubst '$IMAGE' < manifests/backend.yaml | kubectl apply -f -
+          kubectl rollout status deployment/backend-api --timeout=120s
 
   notify:
     name: Notify JOB
